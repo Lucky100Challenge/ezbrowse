@@ -1,101 +1,176 @@
-import Image from "next/image";
+'use client'
+
+import React, { useState, useRef, FormEvent, useEffect } from 'react'
+import Image from 'next/image'
+import Link from 'next/link'
+import axios, { AxiosResponse } from 'axios'
 
 export default function Home() {
-  return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="https://nextjs.org/icons/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
+  const [url, setUrl] = useState('https://example.com')
+  const [history, setHistory] = useState<string[]>([url])
+  const [current, setCurrent] = useState(0)
+  const [bookmarks, setBookmarks] = useState<string[]>([])
+  const [inputUrl, setInputUrl] = useState(url)
+  const [aiResponse, setAiResponse] = useState('')
+  const [showAiResponse, setShowAiResponse] = useState(false)
+  const [error, setError] = useState('')
+  const iframeRef = useRef<HTMLIFrameElement>(null)
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+  useEffect(() => {
+    const storedBookmarks = localStorage.getItem('bookmarks')
+    if (storedBookmarks) {
+      setBookmarks(JSON.parse(storedBookmarks))
+    }
+  }, [])
+
+  const navigate = (newUrl: string) => {
+    let processedUrl = newUrl
+    if (!newUrl.startsWith('http://') && !newUrl.startsWith('https://')) {
+      processedUrl = `https://${newUrl}`
+    }
+    const updatedHistory = history.slice(0, current + 1)
+    updatedHistory.push(processedUrl)
+    setHistory(updatedHistory)
+    setCurrent(updatedHistory.length - 1)
+    setUrl(processedUrl)
+    setError('')
+  }
+
+  const goBack = () => {
+    if (current > 0) {
+      setCurrent(current - 1)
+      setUrl(history[current - 1])
+    }
+  }
+
+  const goForward = () => {
+    if (current < history.length - 1) {
+      setCurrent(current + 1)
+      setUrl(history[current + 1])
+    }
+  }
+
+  const addBookmark = () => {
+    if (!bookmarks.includes(url)) {
+      const newBookmarks = [...bookmarks, url]
+      setBookmarks(newBookmarks)
+      localStorage.setItem('bookmarks', JSON.stringify(newBookmarks))
+    }
+  }
+
+  const handleSearch = async (e: FormEvent) => {
+    e.preventDefault()
+    if (inputUrl.startsWith('@ai ')) {
+      const userQuery = inputUrl.slice(4)
+      try {
+        const response: AxiosResponse<{ answer: string }> = await axios.post('/api/genai', { query: userQuery })
+        setAiResponse(response.data.answer)
+        setShowAiResponse(true)
+      } catch (error: any) {
+        console.error('Error fetching AI response:', error.response?.data || error.message)
+        setAiResponse(`Failed to get AI response: ${error.response?.data?.error || error.message}`)
+        setShowAiResponse(true)
+      }
+    } else {
+      navigate(inputUrl)
+    }
+  }
+
+  const closeAiResponse = () => {
+    setShowAiResponse(false)
+  }
+
+  const handleIframeError = () => {
+    setError('Unable to load the requested page. It may not allow embedding.')
+  }
+
+  return (
+    <div className="flex flex-col h-screen bg-gray-100">
+      <div className="flex items-center p-4 bg-white shadow-md">
+        <button onClick={goBack} className="p-2 mr-2 text-gray-600 hover:bg-gray-100 rounded-full transition-colors">
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+            <path fillRule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clipRule="evenodd" />
+          </svg>
+        </button>
+        <button onClick={goForward} className="p-2 mr-4 text-gray-600 hover:bg-gray-100 rounded-full transition-colors">
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+            <path fillRule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z" clipRule="evenodd" />
+          </svg>
+        </button>
+        <form onSubmit={handleSearch} className="flex-1">
+          <input
+            type="text"
+            value={inputUrl}
+            onChange={(e) => setInputUrl(e.target.value)}
+            placeholder="Enter URL or @ai query..."
+            className="w-full p-2 rounded-full border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+          />
+        </form>
+        <button onClick={addBookmark} className="ml-4 p-2 text-gray-600 hover:bg-gray-100 rounded-full transition-colors">
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+            <path d="M5 4a2 2 0 012-2h6a2 2 0 012 2v14l-5-2.5L5 18V4z" />
+          </svg>
+        </button>
+        <Link href="/bookmarks" className="ml-4 p-2 text-gray-600 hover:bg-gray-100 rounded-full transition-colors">
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+            <path d="M7 3a1 1 0 000 2h6a1 1 0 100-2H7zM4 7a1 1 0 011-1h10a1 1 0 110 2H5a1 1 0 01-1-1zM2 11a2 2 0 012-2h12a2 2 0 012 2v4a2 2 0 01-2 2H4a2 2 0 01-2-2v-4z" />
+          </svg>
+        </Link>
+      </div>
+      {showAiResponse && aiResponse && (
+        <div className="p-4 bg-blue-50 text-blue-800 relative animate-fadeIn">
+          <button 
+            onClick={closeAiResponse} 
+            className="absolute top-2 right-2 text-blue-600 hover:text-blue-800 transition-colors"
           >
-            <Image
-              className="dark:invert"
-              src="https://nextjs.org/icons/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+            </svg>
+          </button>
+          {aiResponse}
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
+      )}
+      {error && (
+        <div className="p-4 bg-red-50 text-red-800 animate-fadeIn">
+          {error}
+        </div>
+      )}
+      <iframe 
+        src={`/api/proxy?url=${encodeURIComponent(url)}`}
+        ref={iframeRef} 
+        className="flex-1 border-none" 
+        onError={handleIframeError}
+        sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
+      />
+      <footer className="flex flex-col items-center justify-center p-4 bg-gray-50">
+        <h3 className="text-lg font-bold mb-2 text-gray-700">#Lucky100 Sponsors</h3>
+        <div className="flex gap-4">
+          <Link href="https://x.com/zalkazemi/" target="_blank" rel="noopener noreferrer" className="transition-transform hover:scale-105">
+            <div className="w-16 h-16 rounded-full overflow-hidden bg-gray-300 flex items-center justify-center shadow-md">
+              <Image
+                src="/images/z.jpg"
+                alt="Sponsor 1"
+                width={64}
+                height={64}
+                objectFit="cover"
+                className="rounded-full"
+              />
+            </div>
+          </Link>
+          <Link href="https://x.com/jansgraphics" target="_blank" rel="noopener noreferrer" className="transition-transform hover:scale-105">
+            <div className="w-16 h-16 rounded-full overflow-hidden bg-gray-300 flex items-center justify-center shadow-md">
+              <Image
+                src="/images/jans.jpg"
+                alt="jans"
+                width={64}
+                height={64}
+                objectFit="cover"
+                className="rounded-full"
+              />
+            </div>
+          </Link>
+        </div>
       </footer>
     </div>
-  );
+  )
 }
